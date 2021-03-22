@@ -1,0 +1,17 @@
+{application, nxo_db,
+ [{description, "pgpool/epgsql utility"},
+  {vsn, {git, short}},
+  {registered, []},
+  {mod, {nxo_db_app, []}},
+  {applications,
+   [kernel,
+    stdlib,
+    pgpool,
+    eqlite
+   ]},
+  {env,[]},
+  {modules, []},
+
+  {licenses, ["Apache 2.0"]},
+  {links, []}
+ ]}.
