@@ -33,7 +33,10 @@ init([]) ->
   Cache = #{ id => nxo_db_cache,
              start => {nxo_db_cache, start_link, []} },
 
-  ChildSpecs = [Cache],
+  Eqlite = #{ id => nxo_db_eqlite,
+              start => {nxo_db_eqlite, start_link, []} },
+
+  ChildSpecs = [Cache, Eqlite],
   {ok, {SupFlags, ChildSpecs}}.
 
 %% internal functions

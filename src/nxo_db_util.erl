@@ -7,46 +7,54 @@
 -export([
           equery/1
         , equery/2
-        , equery/3
+        , squery/1
         ]).
 
 evaluate_file(Filepath) ->
   Filename = filename:basename(Filepath),
   {ok, SQL} = file:read_file(Filepath),
-  case parse_results(equery(SQL)) of
-    [ok, _] ->
+  case parse_results(squery(SQL)) of
+    [Res, _] when Res == ok; Res == multi ->
       io:format("OK: ~s~n", [Filename]);
     [error, E] ->
       io:format("ERROR: ~s (~s)~n", [Filename, maps:get(message, E)])
   end.
 
 
+squery(SQL) ->
+  query(squery, SQL, unused, nxo_db:retries()).
+
 equery(SQL) ->
-  equery(SQL, [], nxo_db:retries()).
+  query(equery, SQL, [], nxo_db:retries()).
 
 equery(SQL, Params) ->
-  equery(SQL, Params, nxo_db:retries()).
+  query(equery, SQL, Params, nxo_db:retries()).
 
-equery(SQL, Params, Retries) ->
+query(Type, SQL, Params, Retries) ->
+  {M, F, A} = case Type == equery of
+                true -> {pgpool, equery, [nxo_db:pool(), SQL, Params]};
+                false -> {pgpool, squery, [nxo_db:pool(), SQL]}
+              end,
   try
-    pgpool:equery(nxo_db:pool(), SQL, Params)
+    apply(M, F, A)
   catch
     exit:{{noproc, _}, _}=Error ->
-      equery_helper(SQL, Params, Retries, Error);
+      query_helper(Type, SQL, Params, Retries, Error);
     exit:{{sock_closed, _}, _}=Error ->
-      equery_helper(SQL, Params, Retries, Error)
+      query_helper(Type, SQL, Params, Retries, Error)
   end.
 
-equery_helper(SQL, Params, Retries, Error) ->
+query_helper(Type, SQL, Params, Retries, Error) ->
   case Retries > 0 of
     true ->
       timer:sleep(nxo_db:retry_sleep()),
-      equery(SQL, Params, Retries - 1);
+      query(Type, SQL, Params, Retries - 1);
     false ->
       exit(Error)
   end.
 
-
+parse_results(MultiResults) when is_list(MultiResults)->
+  [multi, [ parse_results(R) || R <- MultiResults ]];
 parse_results({error, Error}) ->
   X = #{ severity => Error#error.severity,
          code => Error#error.code,
@@ -63,4 +71,6 @@ parse_results({ok, Count}) ->
 parse_results({ok, Count, Rows}) ->
   [ok, #{ count => Count, rows => Rows }];
 parse_results({ok, Count, Columns, Rows}) ->
-  [ok, #{ count => Count, columns => Columns, rows => Rows }].
+  [ok, #{ count => Count, columns => Columns, rows => Rows }];
+parse_results(Unaccounted) ->
+  [error, Unaccounted].
