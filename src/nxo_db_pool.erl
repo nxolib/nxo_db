@@ -2,6 +2,8 @@
 -export([
           config/0
         , default/0
+        , retries/0
+        , retry_sleep/0
         ]).
 
 config() ->
@@ -19,6 +21,12 @@ default() ->
     {ok, [{Default, _} | _]} -> Default;
     _ -> undefined
   end.
+
+retries() ->
+  application:get_env(nxo_db, retries, 1).
+
+retry_sleep() ->
+  application:get_env(nxo_db, retry_sleep, 500).
 
 configure_pool(P) ->
   Name = maps:get(name, P, db),

@@ -10,6 +10,10 @@
           default_pool/0
         , pool/1
         , pool/0
+        , retries/0
+        , retries/1
+        , retry_sleep/0
+        , retry_sleep/1
         ]).
 
 
@@ -18,7 +22,10 @@ start() ->
   ok = application:ensure_started(eqlite),
   ok = pgpool:start(),
   ok = application:ensure_started(nxo_db),
-  nxo_db_cache:set(default_pool, nxo_db_pool:default()).
+  nxo_db_cache:set(default_pool, nxo_db_pool:default()),
+  nxo_db_cache:set(retries, nxo_db_pool:retries()),
+  nxo_db_cache:set(retry_sleep, nxo_db_pool:retry_sleep()).
+
 
 sql_sources(sql) ->
   sql_sources(sql_source, "{sql,eqlite}");
@@ -49,6 +56,28 @@ pool(Pool) ->
 %% Retrieve the current DB pool.
 pool() ->
   nxo_db_cache:lookup(pool, default_pool()).
+
+
+%% How many equery attempts to make.
+retries() ->
+  nxo_db_cache:lookup(retries).
+
+retries(default) ->
+  nxo_db_cache:set(retries, nxo_db_pool:retries());
+retries(Count) ->
+  nxo_db_cache:set(retries, Count).
+
+%% How long to stall between retries.
+retry_sleep() ->
+  nxo_db_cache:lookup(retry_sleep).
+
+retry_sleep(default) ->
+  nxo_db_cache:set(retry_sleep, nxo_db_pool:retry_sleep());
+retry_sleep(MS) ->
+  nxo_db_cache:set(retry_sleep, MS).
+
+
+
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%
