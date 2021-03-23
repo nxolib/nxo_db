@@ -4,6 +4,10 @@
           start/0
         , sql_sources/1
         , apply_full_ddl/0
+        , q/1
+        , q/2
+        , q/3
+        , q/4
         ]).
 
 -export([
@@ -14,6 +18,8 @@
         , retries/1
         , retry_sleep/0
         , retry_sleep/1
+        , return_type/0
+        , return_type/1
         ]).
 
 -export([
@@ -22,6 +28,24 @@
         , query_sql/1
         , query_refresh/0
         ]).
+
+%% Some thoughts:
+%%
+%% -- perhaps the nxo_db ddl_source and sql_source should also be
+%% cached and perhaps there should be a mechanism for augmenting the
+%% list.  this would allow included applications to tack their DB
+%% requirements onto what's configured in the base app.
+%%
+%% -- there should probably be a default return type like there's a
+%% default retries and retries_sleep.  or perhaps this can be auto
+%% selecting based on what's returned from the query or the type could
+%% be coerced from the return value?
+%%   -- no columns: ok/error
+%%   -- one result, one column: scalar
+%%   -- one column of results: list
+%%   -- multi colums: map
+%%
+%% -- transpose and cascade should be implemented.
 
 %%%%%%%%%%%%%%%%%%
 %% HOUSEKEEPING %%
@@ -43,14 +67,25 @@ sql_sources(ddl) ->
 %%%%%%%%%%%%%
 %% QUERIES %%
 %%%%%%%%%%%%%
+return_type() ->
+  nxo_db_cache:lookup(default_return, nxo_db_util:default_query_return()).
 
-% Types could be raw, scalar, list, map, ... ?
+return_type(default) ->
+  nxo_db_cache:set(default_return, nxo_db_util:default_query_return());
+return_type(Return) ->
+  nxo_db_cache:set(default_return, Return).
 
-q(Type, Query) ->
-  q(Type, Query, []).
+q(Query) ->
+  q(Query, [], return_type(), #{}).
 
-q(Type, Query, Params) ->
-  not_implemented.
+q(Query, Params) ->
+  q(Query, Params, return_type(), #{}).
+
+q(Query, Params, Type) ->
+  q(Query, Params, Type, #{}).
+
+q(Query, Params, Type, Options) ->
+  nxo_db_util:q(Query, Params, Type, Options).
 
 
 %%%%%%%%%%%%%%%%%%%%

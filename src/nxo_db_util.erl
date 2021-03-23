@@ -2,12 +2,10 @@
 -include_lib("epgsql/include/epgsql.hrl").
 -export([
           evaluate_file/1
-        ]).
-
--export([
-          equery/1
-        , equery/2
+        , q/4
         , squery/1
+        , default_query_return/0
+
         ]).
 
 evaluate_file(Filepath) ->
@@ -20,15 +18,53 @@ evaluate_file(Filepath) ->
       io:format("ERROR: ~s (~s)~n", [Filename, maps:get(message, E)])
   end.
 
+default_query_return() ->
+  application:get_env(nxo_db, query_return, auto).
 
 squery(SQL) ->
   query(squery, SQL, unused, nxo_db:retries()).
 
-equery(SQL) ->
-  query(equery, SQL, [], nxo_db:retries()).
+q(Query, Params, ReturnType, Options) when is_list(Options) ->
+  q(Query, Params, ReturnType, maps:from_list(Options));
 
-equery(SQL, Params) ->
-  query(equery, SQL, Params, nxo_db:retries()).
+q(Query, Params, ReturnType, Options) when is_map(Options) ->
+  SQL = case nxo_db_eqlite:get_query(Query) of
+          undefined -> error(query_not_found);
+          Code -> Code
+        end,
+  Retries = maps:get(retries, Options, nxo_db:retries()),
+  Res = query(equery, SQL, Params, Retries),
+  format_return(ReturnType, Res).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+format_return(auto, Res) ->
+  format_return(auto_return_type(Res), Res);
+format_return(map, {ok, Columns, Vals}) ->
+  ColumnNames = [  C#column.name || C <- Columns ],
+  [ maps:from_list(lists:zip(ColumnNames, tuple_to_list(R))) || R <- Vals ];
+format_return(list, {ok, _Columns, Vals}) ->
+  Vals;
+format_return(scalar, {ok, _Columns, [{Val}]}) ->
+  Val;
+format_return(parsed, Res) ->
+  parse_results(Res);
+format_return(raw, Res) ->
+  Res.
+
+auto_return_type({error, _}) ->
+  parsed;
+auto_return_type({ok, _}) ->
+  parsed;
+auto_return_type({ok, Columns, Rows}) ->
+  if
+    length(Columns) == 1, length(Rows) == 1 -> scalar;
+    length(Columns) == 1                    -> list;
+    true                                    -> map
+  end;
+auto_return_type({ok, _Count, Columns, Rows}) ->
+  auto_return_type({ok, Columns, Rows}).
+
 
 query(Type, SQL, Params, Retries) ->
   {M, F, A} = case Type == equery of
@@ -68,9 +104,16 @@ parse_results({error, Error}) ->
   [error, maps:merge(Y, X)];
 parse_results({ok, Count}) ->
   [ok, #{ count => Count }];
-parse_results({ok, Count, Rows}) ->
-  [ok, #{ count => Count, rows => Rows }];
+parse_results({ok, Columns, Rows}) ->
+  [ok, #{ columns => columns_to_map(Columns), rows => Rows }];
 parse_results({ok, Count, Columns, Rows}) ->
-  [ok, #{ count => Count, columns => Columns, rows => Rows }];
+  [ok, #{ count => Count, columns => columns_to_map(Columns), rows => Rows }];
 parse_results(Unaccounted) ->
   [error, Unaccounted].
+
+
+%% Take the list of column records [{column, ...}, {column, ...}] and
+%% replace it with a list of maps keyed on the column fields.
+columns_to_map(Columns) ->
+  Fields = record_info(fields, column),
+  [ maps:from_list(lists:zip(Fields, tl(tuple_to_list(C)))) || C <- Columns ].
