@@ -22,7 +22,7 @@ default_query_return() ->
   application:get_env(nxo_db, query_return, auto).
 
 squery(SQL) ->
-  query(squery, SQL, unused, nxo_db:retries()).
+  query(squery, SQL, unused, nxo_db:retries(), nxo_db:pool()).
 
 q(Query, Params, ReturnType, Options) when is_list(Options) ->
   q(Query, Params, ReturnType, maps:from_list(Options));
@@ -33,7 +33,8 @@ q(Query, Params, ReturnType, Options) when is_map(Options) ->
           Code -> Code
         end,
   Retries = maps:get(retries, Options, nxo_db:retries()),
-  Res = query(equery, SQL, Params, Retries),
+  Pool = maps:get(pool, Options, nxo_db:pool()),
+  Res = query(equery, SQL, Params, Retries, Pool),
   format_return(ReturnType, Res).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -66,25 +67,25 @@ auto_return_type({ok, _Count, Columns, Rows}) ->
   auto_return_type({ok, Columns, Rows}).
 
 
-query(Type, SQL, Params, Retries) ->
+query(Type, SQL, Params, Retries, Pool) ->
   {M, F, A} = case Type == equery of
-                true -> {pgpool, equery, [nxo_db:pool(), SQL, Params]};
-                false -> {pgpool, squery, [nxo_db:pool(), SQL]}
+                true -> {pgpool, equery, [Pool, SQL, Params]};
+                false -> {pgpool, squery, [Pool, SQL]}
               end,
   try
     apply(M, F, A)
   catch
     exit:{{noproc, _}, _}=Error ->
-      query_helper(Type, SQL, Params, Retries, Error);
+      query_helper(Type, SQL, Params, Retries, Pool, Error);
     exit:{{sock_closed, _}, _}=Error ->
-      query_helper(Type, SQL, Params, Retries, Error)
+      query_helper(Type, SQL, Params, Retries, Pool, Error)
   end.
 
-query_helper(Type, SQL, Params, Retries, Error) ->
+query_helper(Type, SQL, Params, Retries, Pool, Error) ->
   case Retries > 0 of
     true ->
       timer:sleep(nxo_db:retry_sleep()),
-      query(Type, SQL, Params, Retries - 1);
+      query(Type, SQL, Params, Retries - 1, Pool);
     false ->
       exit(Error)
   end.

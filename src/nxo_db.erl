@@ -35,21 +35,11 @@
 %% cached and perhaps there should be a mechanism for augmenting the
 %% list.  this would allow included applications to tack their DB
 %% requirements onto what's configured in the base app.
-%%
-%% -- there should probably be a default return type like there's a
-%% default retries and retries_sleep.  or perhaps this can be auto
-%% selecting based on what's returned from the query or the type could
-%% be coerced from the return value?
-%%   -- no columns: ok/error
-%%   -- one result, one column: scalar
-%%   -- one column of results: list
-%%   -- multi colums: map
-%%
-%% -- transpose and cascade should be implemented.
 
 %%%%%%%%%%%%%%%%%%
 %% HOUSEKEEPING %%
 %%%%%%%%%%%%%%%%%%
+
 start() ->
   nxo_db_pool:config(),
   ok = pgpool:start(),
