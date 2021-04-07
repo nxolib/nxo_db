@@ -10,6 +10,12 @@
         , q/4
         ]).
 
+-export([ %% provided for backwards compatibility
+          scalar_query/2
+        , list_query/2
+        , map_query/2
+        ]).
+
 -export([
           default_pool/0
         , pool/1
@@ -76,6 +82,21 @@ q(Query, Params, Type) ->
 
 q(Query, Params, Type, Options) ->
   nxo_db_util:q(Query, Params, Type, Options).
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% BACKWARDS COMPATIBILITY %%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+scalar_query(Query, Params) ->
+  q(Query, Params, scalar).
+
+list_query(Query, Params) ->
+  q(Query, Params, list).
+
+map_query(Query, Params) ->
+  q(Query, Params, map).
+
 
 
 %%%%%%%%%%%%%%%%%%%%
