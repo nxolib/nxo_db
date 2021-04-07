@@ -41,19 +41,40 @@ q(Query, Params, ReturnType, Options) when is_map(Options) ->
 
 format_return(auto, Res) ->
   format_return(auto_return_type(Res), Res);
+
 format_return(map, {ok, Columns, Vals}) ->
   ColumnNames = [  C#column.name || C <- Columns ],
   [ maps:from_list(lists:zip(ColumnNames, tuple_to_list(R))) || R <- Vals ];
+
+format_return(map, {ok, _Count, Columns, Vals}) ->
+  format_return(map, {ok, Columns, Vals});
+
+format_return(list, {ok, 1, _Columns, [Vals]}) ->
+  tuple_to_list(Vals);
+
 format_return(list, {ok, _Columns, Vals}) ->
   Vals;
-format_return(scalar, {ok, _Columns, [{Val}]}) ->
-  Val;
+
+format_return(list, {ok, _Count, _Columns, Vals}) ->
+  Vals;
+
+format_return(scalar, {ok, _Columns, Val}) ->
+  case Val of
+    [{V}] -> V;
+    [] -> []
+  end;
+
 format_return(scalar, {ok, _Count, _Columns, [{Val}]}) ->
   Val;
+
 format_return(parsed, Res) ->
   parse_results(Res);
+
 format_return(raw, Res) ->
   Res.
+
+
+
 
 auto_return_type({error, _}) ->
   parsed;

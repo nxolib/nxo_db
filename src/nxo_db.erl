@@ -46,6 +46,10 @@
 %% list.  this would allow included applications to tack their DB
 %% requirements onto what's configured in the base app.
 
+-define(PRINT(Var),
+        error_logger:info_msg("DEBUG: ~p~n~p:~p~n~p~n  ~p~n",
+                              [self(), ?MODULE, ?LINE, ??Var, Var])).
+
 %%%%%%%%%%%%%%%%%%
 %% HOUSEKEEPING %%
 %%%%%%%%%%%%%%%%%%
@@ -204,7 +208,7 @@ cascading_update([{Template, Params}|T], Return) ->
                 Bin when is_binary(Bin) -> lists:append([Bin], Params);
                 _ -> Params
               end,
-  Results = q(Template, AllParams),
+  Results = q(Template, AllParams, list),
   cascading_update(T, Results).
 
 %%%%%%%%%%%%%%%%%%%%%%%%
