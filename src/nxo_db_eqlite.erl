@@ -194,7 +194,7 @@ update_placeholder_info(Key, V) ->
 
 
 find_placeholders(Line, Placeholders) ->
-  case re:run(Line, "(:[a-z][a-zA-Z0-9_]*)",
+  case re:run(Line, "(?<!:)(:[a-z][a-zA-Z0-9_]*)",
               [global, {capture, all_but_first, list}]) of
     nomatch ->
       {Line, Placeholders};

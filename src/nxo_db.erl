@@ -14,6 +14,7 @@
           scalar_query/2
         , list_query/2
         , map_query/2
+        , query/2
         ]).
 
 -export([
@@ -97,6 +98,8 @@ list_query(Query, Params) ->
 map_query(Query, Params) ->
   q(Query, Params, map).
 
+query(Query, Params) ->
+  q(Query, Params).
 
 
 %%%%%%%%%%%%%%%%%%%%
