@@ -15,6 +15,9 @@
         , list_query/2
         , map_query/2
         , query/2
+        , check_dup/3
+        , check_dup/5
+        , cascading_update/1
         ]).
 
 -export([
@@ -162,6 +165,47 @@ retry_sleep(MS) ->
   nxo_db_cache:set(retry_sleep, MS).
 
 
+
+%% @doc Given a table, column, and value return true if exists.
+-spec check_dup(string(), string(), string()) -> true | false.
+check_dup(Table, Column, Value) ->
+  case scalar_query(check_dup, [Table, Column, Value]) of
+    0 -> false;
+    _ -> true
+  end.
+
+-spec check_dup(string(), string(), string(), string(), string())
+               -> true | false.
+check_dup(Table, Column, Value, IDColumn, IDValue) ->
+  case scalar_query(check_dup_with_id,
+                    [Table, Column, Value, IDColumn, IDValue]) of
+    0 -> false;
+    _ -> true
+  end.
+
+
+%% @doc Execute a series of SQL insert/updates using returned values.
+%%
+%% This is a series of queries where the returned values (if any) are
+%% pre-pended to the subsequent parameter list.  For instance, if a
+%% row returns an ID, prepend that ID to the next query.  Each query
+%% can return something different; that new value will be used in the
+%% next query.
+-spec cascading_update([{string(), list()}]) -> any().
+cascading_update(Plan) ->
+  cascading_update(Plan, []).
+
+cascading_update([], Return) ->
+  Return;
+cascading_update([{Template, Params}|T], Return) ->
+  %% returned values are binaries!
+  AllParams = case Return of
+                Lst when is_list(Lst) -> lists:append(Lst, Params);
+                Bin when is_binary(Bin) -> lists:append([Bin], Params);
+                _ -> Params
+              end,
+  Results = q(Template, AllParams),
+  cascading_update(T, Results).
 
 %%%%%%%%%%%%%%%%%%%%%%%%
 %% INTERNAL FUNCTIONS %%

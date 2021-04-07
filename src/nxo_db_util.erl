@@ -48,6 +48,8 @@ format_return(list, {ok, _Columns, Vals}) ->
   Vals;
 format_return(scalar, {ok, _Columns, [{Val}]}) ->
   Val;
+format_return(scalar, {ok, _Count, _Columns, [{Val}]}) ->
+  Val;
 format_return(parsed, Res) ->
   parse_results(Res);
 format_return(raw, Res) ->
