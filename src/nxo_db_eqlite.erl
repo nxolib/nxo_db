@@ -142,8 +142,8 @@ parse_file(FileIO) ->
 
 parse_line(FileIO, eof, Acc, _CurrentQuery) ->
   file:close(FileIO),
-  Acc;
-
+  NewAcc = maps:map(fun update_placeholder_info/2, Acc),
+  NewAcc;
 parse_line(FileIO, {ok, Line}, Acc, CurrentQuery) ->
   {NewCurrentQuery, NewAcc} =
     case string:trim(Line, leading) of
@@ -151,6 +151,7 @@ parse_line(FileIO, {ok, Line}, Acc, CurrentQuery) ->
         [RawQueryName | Info] = string:split(Rest, " "),
         QueryName = list_to_atom(string:trim(RawQueryName)),
         NewMap = maps:put(QueryName, #{ data => [],
+                                        placeholders => {0, #{}},
                                         info => string:trim(Info) }, Acc),
         {QueryName, NewMap};
       "--" ++ _ ->                              % comment line
@@ -159,12 +160,94 @@ parse_line(FileIO, {ok, Line}, Acc, CurrentQuery) ->
         {CurrentQuery, Acc};
       Code ->                                   % line of code
         CurrentQueryMap = maps:get(CurrentQuery, Acc),
+        CurrentPlaceholders = maps:get(placeholders, CurrentQueryMap),
+        {NewCode, NewPlaceholders} =
+          find_placeholders(Code, CurrentPlaceholders),
         CurrentLines = maps:get(data, CurrentQueryMap, []),
-        NewLines = CurrentLines ++ Code,
-        NewQueryMap = maps:put(data, NewLines, CurrentQueryMap),
-        {CurrentQuery, maps:put(CurrentQuery, NewQueryMap, Acc)}
+        NewLines = CurrentLines ++ NewCode,
+        NewQueryMap1 = maps:put(data, NewLines, CurrentQueryMap),
+        NewQueryMap2 = maps:put(placeholders, NewPlaceholders, NewQueryMap1),
+        {CurrentQuery, maps:put(CurrentQuery, NewQueryMap2, Acc)}
       end,
   parse_line(FileIO, file:read_line(FileIO), NewAcc, NewCurrentQuery).
+
+
+update_placeholder_info(Key, V) ->
+  {_, PH} = maps:get(placeholders, V),
+  Map = maps:fold(fun(K1, V1, Acc) ->
+                      K2 = list_to_atom(string:trim(K1, leading, ":")),
+                      V2 = list_to_integer(string:trim(V1, leading, "$")),
+                      maps:put(V2, K2, Acc)
+                  end, #{}, PH),
+  ParamFun =
+    fun(Params) when is_list(Params) -> Params;
+       (Params) when is_map(Params) ->
+        lists:map(fun(N) ->
+                      ParamKey = maps:get(N, Map),
+                      case maps:get(ParamKey, Params, not_found) of
+                        not_found -> error(missing_query_parameter);
+                        ParamValue -> ParamValue
+                      end
+                  end, lists:seq(1, maps:size(Map)))
+    end,
+  maps:put(paramter_fun, ParamFun, V).
+
+
+find_placeholders(Line, Placeholders) ->
+  case re:run(Line, "(:[a-z][a-zA-Z0-9_]*)",
+              [global, {capture, all_but_first, list}]) of
+    nomatch ->
+      {Line, Placeholders};
+    {match, Captures} ->
+      {NewLine, NewPlaceholders} =
+        replace_placeholders(Line, Captures, Placeholders),
+      {NewLine, NewPlaceholders}
+  end.
+
+replace_placeholders(Line, [], Placeholders) ->
+  {Line, Placeholders};
+replace_placeholders(Line, [[PH]|T], {LastCount, Map}) ->
+  case maps:get(PH, Map, unseen) of
+    unseen ->
+      NewCount = LastCount + 1,
+      NewPlaceholder = "$" ++ integer_to_list(NewCount),
+      NewMap = maps:put(PH, NewPlaceholder, Map),
+      NewLine = re:replace(Line, PH, NewPlaceholder, [{return,list}]),
+      replace_placeholders(NewLine, T, {NewCount, NewMap});
+    Place  ->
+      NewLine = re:replace(Line, PH, Place, [{return,list}]),
+      replace_placeholders(NewLine, T, {LastCount, Map})
+  end.
+
+
+%% parse_file(FileIO) ->
+%%   parse_line(FileIO, file:read_line(FileIO), #{}, []).
+
+%% parse_line(FileIO, eof, Acc, _CurrentQuery) ->
+%%   file:close(FileIO),
+%%   Acc;
+
+%% parse_line(FileIO, {ok, Line}, Acc, CurrentQuery) ->
+%%   {NewCurrentQuery, NewAcc} =
+%%     case string:trim(Line, leading) of
+%%       "-- :" ++ Rest ->                         % query name
+%%         [RawQueryName | Info] = string:split(Rest, " "),
+%%         QueryName = list_to_atom(string:trim(RawQueryName)),
+%%         NewMap = maps:put(QueryName, #{ data => [],
+%%                                         info => string:trim(Info) }, Acc),
+%%         {QueryName, NewMap};
+%%       "--" ++ _ ->                              % comment line
+%%         {CurrentQuery, Acc};
+%%       "" ->                                     % blank line
+%%         {CurrentQuery, Acc};
+%%       Code ->                                   % line of code
+%%         CurrentQueryMap = maps:get(CurrentQuery, Acc),
+%%         CurrentLines = maps:get(data, CurrentQueryMap, []),
+%%         NewLines = CurrentLines ++ Code,
+%%         NewQueryMap = maps:put(data, NewLines, CurrentQueryMap),
+%%         {CurrentQuery, maps:put(CurrentQuery, NewQueryMap, Acc)}
+%%       end,
+%%   parse_line(FileIO, file:read_line(FileIO), NewAcc, NewCurrentQuery).
 
 
 %% Given a map of queries like
