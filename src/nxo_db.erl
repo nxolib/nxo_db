@@ -8,6 +8,7 @@
         , q/2
         , q/3
         , q/4
+        , batch/1
         ]).
 
 -export([ %% provided for backwards compatibility
@@ -90,6 +91,16 @@ q(Query, Params, Type) ->
 
 q(Query, Params, Type, Options) ->
   nxo_db_util:q(Query, Params, Type, Options).
+
+batch(ListOfParams) ->
+  InSize = length(ListOfParams),
+  Res = pgpool:batch(nxo_db:pool(), ListOfParams),
+  case InSize /= length(Res) of
+    true -> ?PRINT("batch seemed to have an issue?");
+    false -> ok
+  end.
+
+
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%

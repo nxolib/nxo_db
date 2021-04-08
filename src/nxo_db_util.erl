@@ -53,7 +53,7 @@ format_return(list, {ok, 1, _Columns, [Vals]}) ->
   tuple_to_list(Vals);
 
 format_return(list, {ok, _Columns, Vals}) ->
-  Vals;
+  [ V || {V} <- Vals ];
 
 format_return(list, {ok, _Count, _Columns, Vals}) ->
   Vals;
