@@ -36,9 +36,12 @@ init([]) ->
   {ok, #{}}.
 
 %% @doc Retrive the specified query.
--spec get_query(atom()) -> string().
-get_query(Query) ->
-  gen_server:call(?SERVER, {get_query, Query}).
+-spec get_query(atom()|string()) -> string().
+get_query(Query) when is_atom(Query)->
+  gen_server:call(?SERVER, {get_query, Query});
+get_query(Query) when is_list(Query); is_binary(Query) ->
+  Query.
+
 
 %% @doc Retrieve the info from the specified query.
 -spec get_info(atom()) -> string().
@@ -172,7 +175,7 @@ parse_line(FileIO, {ok, Line}, Acc, CurrentQuery) ->
   parse_line(FileIO, file:read_line(FileIO), NewAcc, NewCurrentQuery).
 
 
-update_placeholder_info(Key, V) ->
+update_placeholder_info(_Key, V) ->
   {_, PH} = maps:get(placeholders, V),
   Map = maps:fold(fun(K1, V1, Acc) ->
                       K2 = list_to_atom(string:trim(K1, leading, ":")),

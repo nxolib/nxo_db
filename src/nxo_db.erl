@@ -9,6 +9,7 @@
         , q/3
         , q/4
         , batch/1
+        , batch/2
         ]).
 
 -export([ %% provided for backwards compatibility
@@ -92,16 +93,33 @@ q(Query, Params, Type) ->
 q(Query, Params, Type, Options) ->
   nxo_db_util:q(Query, Params, Type, Options).
 
+
+%% ListOfParams is {QueryText, [Params]}
+
+%% RetryFlag (a bool) when true indicates that a failing batch should
+%% be re-processed statement by statement and errors reported.
+
 batch(ListOfParams) ->
+  batch(ListOfParams, true).
+
+batch(ListOfParams, RetryFlag) ->
   InSize = length(ListOfParams),
   Res = pgpool:batch(nxo_db:pool(), ListOfParams),
   case InSize /= length(Res) of
-    true -> ?PRINT("batch seemed to have an issue?");
-    false -> ok
+    true ->  %% batch had a failing statement
+      case RetryFlag of
+        true  -> iterate_batch(ListOfParams);
+        false -> error_logger:error_msg("Batch Failed")
+      end;
+    false ->
+      ok  %% batch succeeded
   end.
 
-
-
+iterate_batch(ListOfParams) ->
+  lists:filter(fun([ok, _]) -> false;
+                  ([error, _]) -> true
+               end,
+               [ q(SQL, Params, parsed) || {SQL, Params} <- ListOfParams ]).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% BACKWARDS COMPATIBILITY %%

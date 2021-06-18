@@ -29,7 +29,7 @@ q(Query, Params, ReturnType, Options) when is_list(Options) ->
 
 q(Query, Params, ReturnType, Options) when is_map(Options) ->
   SQL = case nxo_db_eqlite:get_query(Query) of
-          undefined -> error(query_not_found);
+          undefined -> error({query_not_found, Query});
           Code -> Code
         end,
   Retries = maps:get(retries, Options, nxo_db:retries()),
