@@ -105,15 +105,24 @@ batch(ListOfParams) ->
 batch(ListOfParams, RetryFlag) ->
   InSize = length(ListOfParams),
   Res = pgpool:batch(nxo_db:pool(), ListOfParams),
-  case InSize /= length(Res) of
-    true ->  %% batch had a failing statement
-      case RetryFlag of
-        true  -> iterate_batch(ListOfParams);
-        false -> error_logger:error_msg("Batch Failed")
-      end;
-    false ->
-      ok  %% batch succeeded
+  try InSize = length(Res) of
+    _ -> ok
+  catch
+    _:_ -> case RetryFlag of
+             true -> iterate_batch(ListOfParams);
+             false -> error_logger:error_msg("Batch Failes")
+           end
   end.
+
+  %% case InSize /= length(Res) of
+  %%   true ->  %% batch had a failing statement
+  %%     case RetryFlag of
+  %%       true  -> iterate_batch(ListOfParams);
+  %%       false -> error_logger:error_msg("Batch Failed")
+  %%     end;
+  %%   false ->
+  %%     ok  %% batch succeeded
+  %% end.
 
 iterate_batch(ListOfParams) ->
   lists:filter(fun([ok, _]) -> false;
