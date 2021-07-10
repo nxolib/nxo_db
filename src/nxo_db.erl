@@ -8,8 +8,9 @@
         , q/2
         , q/3
         , q/4
-        , batch/1
         , batch/2
+        , batch/3
+        , batch/4
         ]).
 
 -export([ %% provided for backwards compatibility
@@ -94,41 +95,37 @@ q(Query, Params, Type, Options) ->
   nxo_db_util:q(Query, Params, Type, Options).
 
 
-%% ListOfParams is {QueryText, [Params]}
 
 %% RetryFlag (a bool) when true indicates that a failing batch should
 %% be re-processed statement by statement and errors reported.
 
-batch(ListOfParams) ->
-  batch(ListOfParams, true).
+batch(SQL, ListOfParams) ->
+  batch(SQL, ListOfParams, true).
 
-batch(ListOfParams, RetryFlag) ->
+batch(SQL, ListOfParams, RetryFlag) ->
+  batch(SQL, ListOfParams, RetryFlag, nxo_db_pool:default()).
+
+batch(SQL, ListOfParams, RetryFlag, Pool) ->
   InSize = length(ListOfParams),
-  Res = pgpool:batch(nxo_db:pool(), ListOfParams),
+  {ok, Connection} = nxo_db_pool:connection(Pool),
+  {_, Res} = epgsql:execute_batch(Connection, SQL, ListOfParams),
   try InSize = length(Res) of
-    _ -> ok
+    _ -> epgsql:close(Connection)
   catch
-    _:_ -> case RetryFlag of
-             true -> iterate_batch(ListOfParams);
-             false -> error_logger:error_msg("Batch Failes")
-           end
+    _:_ ->
+      case RetryFlag of
+        true -> iterate_batch(SQL, ListOfParams);
+        false -> error_logger:error_msg("Batch Failed")
+      end
+  after
+    epgsql:close(Connection)
   end.
 
-  %% case InSize /= length(Res) of
-  %%   true ->  %% batch had a failing statement
-  %%     case RetryFlag of
-  %%       true  -> iterate_batch(ListOfParams);
-  %%       false -> error_logger:error_msg("Batch Failed")
-  %%     end;
-  %%   false ->
-  %%     ok  %% batch succeeded
-  %% end.
-
-iterate_batch(ListOfParams) ->
+iterate_batch(SQL, ListOfParams) ->
   lists:filter(fun([ok, _]) -> false;
                   ([error, _]) -> true
                end,
-               [ q(SQL, Params, parsed) || {SQL, Params} <- ListOfParams ]).
+               [ q(SQL, Params, parsed) || Params <- ListOfParams ]).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% BACKWARDS COMPATIBILITY %%

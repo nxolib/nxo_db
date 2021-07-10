@@ -1,10 +1,15 @@
 -module(nxo_db_pool).
 -export([
           config/0
+        , connection/1
         , default/0
         , retries/0
         , retry_sleep/0
         ]).
+
+-define(PRINT(Var),
+        error_logger:info_msg("DEBUG: ~p~n~p:~p~n~p~n  ~p~n",
+                              [self(), ?MODULE, ?LINE, ??Var, Var])).
 
 config() ->
   case application:get_env(pgpool, databases) of
@@ -15,6 +20,24 @@ config() ->
     {ok, _} ->
       ok
   end.
+
+connection(Name) ->
+  Pools = lists:filter(fun(#{name := DB}) when DB == Name -> true;
+                          (_)                             -> false
+                      end, application:get_env(nxo_db, pools, [])),
+  case Pools of
+    [P] ->
+      Password = get_pool_password(Name, maps:get(pass, P, undefined)),
+      epgsql:connect(#{host     => maps:get(host, P, Name),
+                       username => maps:get(user, P, []),
+                       password => Password,
+                       ssl      => maps:get(ssl, P, false),
+                       database => maps:get(database, P, [])});
+
+    _ ->
+      undefined
+  end.
+
 
 default() ->
   case application:get_env(pgpool, databases) of
