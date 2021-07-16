@@ -42,6 +42,10 @@
         , query_refresh/0
         ]).
 
+-export([
+          config/0
+        , connection/1
+        ]).
 %% Some thoughts:
 %%
 %% -- perhaps the nxo_db ddl_source and sql_source should also be
@@ -56,7 +60,6 @@
 %%%%%%%%%%%%%%%%%%
 %% HOUSEKEEPING %%
 %%%%%%%%%%%%%%%%%%
-
 start() ->
   nxo_db_pool:config(),
   ok = pgpool:start(),
@@ -66,10 +69,15 @@ start() ->
   nxo_db_cache:set(retry_sleep, nxo_db_pool:retry_sleep()),
   nxo_db_eqlite:refresh(sql_sources(sql)).
 
-sql_sources(sql) ->
-  sql_sources(sql_source, "{sql,eqlite}");
-sql_sources(ddl) ->
-  sql_sources(ddl_source, "sql").
+
+%%%%%%%%%%%%%%
+%% DISPATCH %%
+%%%%%%%%%%%%%%
+config() ->
+  nxo_db_pool:config().
+
+connection(Name) ->
+  nxo_db_pool:connection(Name).
 
 %%%%%%%%%%%%%
 %% QUERIES %%
@@ -130,18 +138,10 @@ iterate_batch(SQL, ListOfParams) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% BACKWARDS COMPATIBILITY %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-scalar_query(Query, Params) ->
-  q(Query, Params, scalar).
-
-list_query(Query, Params) ->
-  q(Query, Params, list).
-
-map_query(Query, Params) ->
-  q(Query, Params, map).
-
-query(Query, Params) ->
-  q(Query, Params).
+scalar_query(Query, Params) -> q(Query, Params, scalar).
+list_query(Query, Params)   -> q(Query, Params, list).
+map_query(Query, Params)    -> q(Query, Params, map).
+query(Query, Params)        -> q(Query, Params).
 
 
 %%%%%%%%%%%%%%%%%%%%
@@ -246,9 +246,15 @@ cascading_update([{Template, Params}|T], Return) ->
   Results = q(Template, AllParams, list),
   cascading_update(T, Results).
 
-%%%%%%%%%%%%%%%%%%%%%%%%
-%% INTERNAL FUNCTIONS %%
-%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+%%%%%%%%%%%%%%%%%
+%% SQL SOURCES %%
+%%%%%%%%%%%%%%%%%
+sql_sources(sql) ->
+  sql_sources(sql_source, "{sql,eqlite}");
+sql_sources(ddl) ->
+  sql_sources(ddl_source, "sql").
 
 sql_sources(ConfigKey, Extensions) ->
   case application:get_env(nxo_db, ConfigKey, undefined) of

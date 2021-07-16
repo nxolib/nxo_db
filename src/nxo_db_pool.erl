@@ -11,6 +11,11 @@
         error_logger:info_msg("DEBUG: ~p~n~p:~p~n~p~n  ~p~n",
                               [self(), ?MODULE, ?LINE, ??Var, Var])).
 
+%% @doc Reads nxo_db/pools environment configuration.
+%%
+%% If unset, pgpool/databases configuration is set based on the data;
+%% if pgpool/databases is not undefined, this function no-opts.
+-spec config() -> ok.
 config() ->
   case application:get_env(pgpool, databases) of
     undefined ->
@@ -21,6 +26,12 @@ config() ->
       ok
   end.
 
+%% @doc Establish an epgsql connection (or error)for the named DB..If
+%% the DB speciied isn't found in the nxo_db/pools configuration,
+%% returns undefined.
+-spec connection(atom()) -> {ok, epgsql:connection()}
+          | {error, epgsql:connection_error()}
+          | undefined.
 connection(Name) ->
   Pools = lists:filter(fun(#{name := DB}) when DB == Name -> true;
                           (_)                             -> false
@@ -38,18 +49,29 @@ connection(Name) ->
       undefined
   end.
 
-
+%% @doc Returns the name of the default DB pool.  The default pool is
+%% the first DB connection defined.  If no pools are defined, returns
+%% undefined.
+-spec default() -> atom() | undefined.
 default() ->
   case application:get_env(pgpool, databases) of
     {ok, [{Default, _} | _]} -> Default;
     _ -> undefined
   end.
 
+%% @doc The configured number of query retries (default: 1).
+-spec retries() -> integer().
 retries() ->
   application:get_env(nxo_db, retries, 1).
 
+%% @doc The time to sleep (ms) between retries (default: 500).
+-spec retry_sleep() -> integer().
 retry_sleep() ->
   application:get_env(nxo_db, retry_sleep, 500).
+
+%%%%%%%%%%%%%%%%%%%%%%%%
+%% INTERNAL FUNCTIONS %%
+%%%%%%%%%%%%%%%%%%%%%%%%
 
 configure_pool(P) ->
   Name = maps:get(name, P, db),
