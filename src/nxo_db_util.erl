@@ -89,7 +89,6 @@ auto_return_type({ok, Columns, Rows}) ->
 auto_return_type({ok, _Count, Columns, Rows}) ->
   auto_return_type({ok, Columns, Rows}).
 
-
 query(Type, SQL, Params, Retries, Pool) ->
   {M, F, A} = case Type == equery of
                 true -> {pgpool, equery, [Pool, SQL, Params]};

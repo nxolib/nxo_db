@@ -42,10 +42,6 @@
         , query_refresh/0
         ]).
 
--export([
-          config/0
-        , connection/1
-        ]).
 %% Some thoughts:
 %%
 %% -- perhaps the nxo_db ddl_source and sql_source should also be
@@ -60,6 +56,7 @@
 %%%%%%%%%%%%%%%%%%
 %% HOUSEKEEPING %%
 %%%%%%%%%%%%%%%%%%
+
 start() ->
   nxo_db_pool:config(),
   ok = pgpool:start(),
@@ -69,15 +66,10 @@ start() ->
   nxo_db_cache:set(retry_sleep, nxo_db_pool:retry_sleep()),
   nxo_db_eqlite:refresh(sql_sources(sql)).
 
-
-%%%%%%%%%%%%%%
-%% DISPATCH %%
-%%%%%%%%%%%%%%
-config() ->
-  nxo_db_pool:config().
-
-connection(Name) ->
-  nxo_db_pool:connection(Name).
+sql_sources(sql) ->
+  sql_sources(sql_source, "{sql,eqlite}");
+sql_sources(ddl) ->
+  sql_sources(ddl_source, "sql").
 
 %%%%%%%%%%%%%
 %% QUERIES %%
@@ -108,40 +100,29 @@ q(Query, Params, Type, Options) ->
 %% be re-processed statement by statement and errors reported.
 
 batch(SQL, ListOfParams) ->
-  batch(SQL, ListOfParams, true).
+  batch(SQL, ListOfParams, true, nxo_db_pool:default()).
 
 batch(SQL, ListOfParams, RetryFlag) ->
   batch(SQL, ListOfParams, RetryFlag, nxo_db_pool:default()).
 
 batch(SQL, ListOfParams, RetryFlag, Pool) ->
-  InSize = length(ListOfParams),
-  {ok, Connection} = nxo_db_pool:connection(Pool),
-  {_, Res} = epgsql:execute_batch(Connection, SQL, ListOfParams),
-  try InSize = length(Res) of
-    _ -> epgsql:close(Connection)
-  catch
-    _:_ ->
-      case RetryFlag of
-        true -> iterate_batch(SQL, ListOfParams);
-        false -> error_logger:error_msg("Batch Failed")
-      end
-  after
-    epgsql:close(Connection)
-  end.
-
-iterate_batch(SQL, ListOfParams) ->
-  lists:filter(fun([ok, _]) -> false;
-                  ([error, _]) -> true
-               end,
-               [ q(SQL, Params, parsed) || Params <- ListOfParams ]).
+  nxo_batch:batch(SQL, ListOfParams, RetryFlag, Pool).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% BACKWARDS COMPATIBILITY %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-scalar_query(Query, Params) -> q(Query, Params, scalar).
-list_query(Query, Params)   -> q(Query, Params, list).
-map_query(Query, Params)    -> q(Query, Params, map).
-query(Query, Params)        -> q(Query, Params).
+
+scalar_query(Query, Params) ->
+  q(Query, Params, scalar).
+
+list_query(Query, Params) ->
+  q(Query, Params, list).
+
+map_query(Query, Params) ->
+  q(Query, Params, map).
+
+query(Query, Params) ->
+  q(Query, Params).
 
 
 %%%%%%%%%%%%%%%%%%%%
@@ -246,15 +227,9 @@ cascading_update([{Template, Params}|T], Return) ->
   Results = q(Template, AllParams, list),
   cascading_update(T, Results).
 
-
-
-%%%%%%%%%%%%%%%%%
-%% SQL SOURCES %%
-%%%%%%%%%%%%%%%%%
-sql_sources(sql) ->
-  sql_sources(sql_source, "{sql,eqlite}");
-sql_sources(ddl) ->
-  sql_sources(ddl_source, "sql").
+%%%%%%%%%%%%%%%%%%%%%%%%
+%% INTERNAL FUNCTIONS %%
+%%%%%%%%%%%%%%%%%%%%%%%%
 
 sql_sources(ConfigKey, Extensions) ->
   case application:get_env(nxo_db, ConfigKey, undefined) of
