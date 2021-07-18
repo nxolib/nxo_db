@@ -13,9 +13,9 @@ evaluate_file(Filepath) ->
   {ok, SQL} = file:read_file(Filepath),
   case check_squery_errors(parse_results(squery(SQL))) of
     success ->
-      io:format("OK: ~s~n", [Filename]);
+      logger:notice("OK: ~s~n", [Filename]);
     {error, E} ->
-      io:format("ERROR: ~s (~s)~n", [Filename, maps:get(message, E)])
+      logger:error("ERROR: ~s (~s)~n", [Filename, maps:get(message, E)])
   end.
 
 check_squery_errors([ok, _]) ->
@@ -49,7 +49,8 @@ q(Query, Params, ReturnType, Options) when is_map(Options) ->
         end,
   Retries = maps:get(retries, Options, nxo_db:retries()),
   Pool = maps:get(pool, Options, nxo_db:pool()),
-  Res = query(equery, SQL, Params, Retries, Pool),
+  WashedParams = nxo_db_eqlite:wash_placeholders(Query, Params),
+  Res = query(equery, SQL, WashedParams, Retries, Pool),
   format_return(ReturnType, Res).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

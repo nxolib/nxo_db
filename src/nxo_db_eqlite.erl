@@ -6,6 +6,8 @@
         , stop/0
         , get_query/1
         , get_info/1
+        , get_placeholders/1
+        , wash_placeholders/2
         , list_queries/0
         , refresh/1
         ]).
@@ -48,6 +50,23 @@ get_query(Query) when is_list(Query); is_binary(Query) ->
 get_info(Query) ->
   gen_server:call(?SERVER, {get_info, Query}).
 
+%% @doc Retrieve the parameter list from the specified query
+-spec get_placeholders(atom()) -> [atom()] | no_placeholders.
+get_placeholders(Query) ->
+  gen_server:call(?SERVER, {get_placeholders, Query}).
+
+%% @doc Convert a param map into a parameter list for the query
+-spec wash_placeholders(atom(), map()) -> list().
+wash_placeholders(_Query, Params) when is_list(Params) -> Params;
+wash_placeholders(Query, Params) ->
+  case get_placeholders(Query) of
+    PList when is_list(PList) -> convert_param_map_to_list(PList, Params);
+    _ -> undefined
+  end.
+
+convert_param_map_to_list(PList, PMap) ->
+  [ maps:get(K, PMap, null) || K <- PList ].
+
 %% @doc List the avaialble queries.
 -spec list_queries() -> [atom()].
 list_queries() ->
@@ -60,18 +79,24 @@ refresh(Files) ->
 
 internal_get_query(Query) ->
   case ets:lookup(?EQLITE_TAB, Query) of
-    [{Query, _Info, Statement}] -> Statement;
+    [{Query, _Info, Statement, _Placeholders}] -> Statement;
     _ -> undefined
   end.
 
 internal_get_info(Query) ->
   case ets:lookup(?EQLITE_TAB, Query) of
-    [{Query, Info, _Statement}] -> Info;
+    [{Query, Info, _Statement, _Placeholders}] -> Info;
+    _ -> undefined
+  end.
+
+internal_get_placeholders(Query) ->
+  case ets:lookup(?EQLITE_TAB, Query) of
+    [{Query, _Info, _Statement, Placeholders}] -> Placeholders;
     _ -> undefined
   end.
 
 internal_list_queries() ->
-  Qs = ets:foldl(fun({Query, _, _}, Acc) -> [Query | Acc] end,
+  Qs = ets:foldl(fun({Query, _, _, _}, Acc) -> [Query | Acc] end,
                  [], ?EQLITE_TAB),
   lists:sort(Qs).
 
@@ -84,6 +109,9 @@ handle_call({get_info, Query}, _From, State) ->
 
 handle_call({get_query, Query}, _From, State) ->
   {reply, internal_get_query(Query), State};
+
+handle_call({get_placeholders, Query}, _From, State) ->
+  {reply, internal_get_placeholders(Query), State};
 
 handle_call(list_queries, _From, State) ->
   {reply, internal_list_queries(), State};
@@ -131,11 +159,11 @@ parse_files(Files) ->
               #{}, Files).
 
 read_file(".eqlite", Filepath, Acc) ->
-  io:format("Parsing eqlite file ~s~n", [Filepath]),
+  logger:notice("Parsing eqlite file ~s~n", [Filepath]),
   {ok, FileIO} = file:open(Filepath, [read]),
   maps:merge(parse_file(FileIO), Acc);
 read_file(".sql", Filepath, Acc) ->
-  io:format("Parsing SQL file ~s~n", [Filepath]),
+  logger:notice("Parsing SQL file ~s~n", [Filepath]),
   Query = list_to_atom(filename:basename(Filepath, ".sql")),
   {ok, Data} = file:read_file(Filepath),
   maps:merge(#{ Query => #{info => "SQL File", data => Data }}, Acc).
@@ -222,37 +250,6 @@ replace_placeholders(Line, [[PH]|T], {LastCount, Map}) ->
       replace_placeholders(NewLine, T, {LastCount, Map})
   end.
 
-
-%% parse_file(FileIO) ->
-%%   parse_line(FileIO, file:read_line(FileIO), #{}, []).
-
-%% parse_line(FileIO, eof, Acc, _CurrentQuery) ->
-%%   file:close(FileIO),
-%%   Acc;
-
-%% parse_line(FileIO, {ok, Line}, Acc, CurrentQuery) ->
-%%   {NewCurrentQuery, NewAcc} =
-%%     case string:trim(Line, leading) of
-%%       "-- :" ++ Rest ->                         % query name
-%%         [RawQueryName | Info] = string:split(Rest, " "),
-%%         QueryName = list_to_atom(string:trim(RawQueryName)),
-%%         NewMap = maps:put(QueryName, #{ data => [],
-%%                                         info => string:trim(Info) }, Acc),
-%%         {QueryName, NewMap};
-%%       "--" ++ _ ->                              % comment line
-%%         {CurrentQuery, Acc};
-%%       "" ->                                     % blank line
-%%         {CurrentQuery, Acc};
-%%       Code ->                                   % line of code
-%%         CurrentQueryMap = maps:get(CurrentQuery, Acc),
-%%         CurrentLines = maps:get(data, CurrentQueryMap, []),
-%%         NewLines = CurrentLines ++ Code,
-%%         NewQueryMap = maps:put(data, NewLines, CurrentQueryMap),
-%%         {CurrentQuery, maps:put(CurrentQuery, NewQueryMap, Acc)}
-%%       end,
-%%   parse_line(FileIO, file:read_line(FileIO), NewAcc, NewCurrentQuery).
-
-
 %% Given a map of queries like
 %%   #{ query_name => #{info => [], data => []}
 %% insert {query_name, info, data} into the ETS table.
@@ -263,5 +260,21 @@ file_eqlite_queries(Queries, Table) ->
 query_iterator(none, _Table) ->
   ok;
 query_iterator({K, V, Iterator}, Table) ->
-  ets:insert(Table, {K, maps:get(info, V, []), maps:get(data, V, [])}),
+  Placeholders = placeholder_fixup(maps:get(placeholders, V, {0, #{}})),
+  ets:insert(Table, {K,
+                     maps:get(info, V, []),
+                     maps:get(data, V, []),
+                     Placeholders}),
   query_iterator(maps:next(Iterator), Table).
+
+
+placeholder_fixup({0, _}) ->
+  no_placeholders;
+placeholder_fixup({Count, Map}) ->
+  NewMap =
+    maps:fold(fun(K, V, Acc) ->
+                  WashedK = list_to_atom(string:trim(K, leading, ":")),
+                  WashedV = list_to_integer(string:trim(V, leading, "$")),
+                  maps:put(WashedV, WashedK, Acc )
+              end, #{}, Map),
+  [ maps:get(N, NewMap) || N <- lists:seq(1, Count) ].
