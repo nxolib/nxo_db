@@ -11,11 +11,26 @@
 evaluate_file(Filepath) ->
   Filename = filename:basename(Filepath),
   {ok, SQL} = file:read_file(Filepath),
-  case parse_results(squery(SQL)) of
-    [Res, _] when Res == ok; Res == multi ->
+  case check_squery_errors(parse_results(squery(SQL))) of
+    success ->
       io:format("OK: ~s~n", [Filename]);
-    [error, E] ->
+    {error, E} ->
       io:format("ERROR: ~s (~s)~n", [Filename, maps:get(message, E)])
+  end.
+
+check_squery_errors([ok, _]) ->
+  success;
+check_squery_errors([error, E]) ->
+  {error, E};
+check_squery_errors([multi, ResultList]) ->
+  Errors = lists:filtermap(fun(R) ->
+                         case check_squery_errors(R) of
+                           success -> false;
+                           {error, E} -> {true, E}
+                         end end, ResultList),
+  case Errors of
+    [] -> success;
+    [E | _] -> {error, E}
   end.
 
 default_query_return() ->
