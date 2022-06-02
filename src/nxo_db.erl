@@ -58,6 +58,7 @@
 %%%%%%%%%%%%%%%%%%
 
 start() ->
+  pgpool:stop(),
   nxo_db_pool:config(),
   ok = pgpool:start(),
   ok = application:ensure_started(nxo_db),
