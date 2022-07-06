@@ -3,15 +3,9 @@
   {vsn, {git, short}},
   {registered, []},
   {mod, {nxo_db_app, []}},
-  {applications,
-   [kernel,
-    stdlib,
-    epgsql,
-    pgpool
-   ]},
+  {applications, [kernel, stdlib, epgsql, pgpool]},
   {env,[]},
   {modules, []},
-
   {licenses, []},
   {links, []}
  ]}.

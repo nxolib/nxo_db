@@ -91,7 +91,7 @@ get_pool_password(_Name, undefined) ->
   [];
 get_pool_password(_Name, {file, File}) ->
   {ok, PW} = file:read_file(File),
-  PW;
+  binary_to_list(PW);
 get_pool_password(Name, Fn) when is_function(Fn)->
   Fn(Name);
 get_pool_password(_Name, Value) ->

@@ -57,9 +57,15 @@
 %% HOUSEKEEPING %%
 %%%%%%%%%%%%%%%%%%
 
+%% XXX: I'm not sure yet what's up with the pgpool stop/start.  It's
+%% unnecessary in the shell environment but in a release, it appers
+%% the pgpool starts before the call to nxo_db_pool:config.  I'm still
+%% not sure what's starting the application.
+
 start() ->
   nxo_db_pool:config(),
-  ok = pgpool:start(),
+  application:stop(pgpool),
+  application:start(pgpool),
   ok = application:ensure_started(nxo_db),
   nxo_db_cache:set(default_pool, nxo_db_pool:default()),
   nxo_db_cache:set(retries, nxo_db_pool:retries()),
