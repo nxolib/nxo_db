@@ -65,6 +65,8 @@
 start() ->
   nxo_db_pool:config(),
   application:stop(pgpool),
+  application:start(poolboy),
+  application:start(epgsql),
   application:start(pgpool),
   ok = application:ensure_started(nxo_db),
   nxo_db_cache:set(default_pool, nxo_db_pool:default()),
